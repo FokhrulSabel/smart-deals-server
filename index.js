@@ -1,17 +1,18 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
-const e = require("express");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+// const e = require("express");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // MongoDB connection URI
-
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@firstdb.egqdlgn.mongodb.net/?appName=firstdb`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -36,6 +37,7 @@ async function run() {
     const bidsCollection = db.collection("bids");
     const usersCollection = db.collection("users");
 
+    // Users APIs
     app.post("/users", async (req, res) => {
       const newUser = req.body;
 
@@ -45,7 +47,7 @@ async function run() {
       const existingUser = await usersCollection.findOne(query);
       // If user exists, do not insert again
       if (existingUser) {
-        return res.send({ message: "User already exists" });
+        res.send({ message: "User already exists" });
       } else {
         const result = await usersCollection.insertOne(newUser);
         res.send(result);
@@ -55,7 +57,27 @@ async function run() {
     // Products APIs
     // Create Operation - Add a new product
     app.get("/products", async (req, res) => {
-      const cursor = productsCollection.find();
+      // const projectFields = { title: 1, price_min: 1, price_max: 1, image: 1 }
+      // const cursor = productsCollection.find().sort({ price_min: -1 }).skip(2).limit(2).project(projectFields);
+
+      console.log(req.query);
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.email = email;
+      }
+
+      const cursor = productsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // Get latest 6 products
+    app.get("/latest-products", async (req, res) => {
+      const cursor = productsCollection
+        .find()
+        .sort({ created_at: -1 })
+        .limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -113,9 +135,39 @@ async function run() {
       res.send(result);
     });
 
+    // Get bids for a specific product, sorted by bid price descending
+    app.get("/products/bids/:productId", async (req, res) => {
+      const productId = req.params.productId; 
+      const query = { product: productId };
+      const cursor = bidsCollection.find(query).sort({ bid_price: -1 });
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // Duplicate route removed
+    app.get("/bids", async (req, res) => {
+      const query = {};
+      if (query.email) {
+        query.buyer_email = email;
+      }
+
+      const cursor = bidsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // Create Operation - Add a new bid
     app.post("/bids", async (req, res) => {
       const newBid = req.body;
       const result = await bidsCollection.insertOne(newBid);
+      res.send(result);
+    });
+
+    // Delete Operation - Delete a bid by ID
+    app.delete("/bids/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bidsCollection.deleteOne(query);
       res.send(result);
     });
 
