@@ -1,15 +1,53 @@
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-// const e = require("express");
-
 const app = express();
 const port = process.env.PORT || 5000;
+
+// Firebase Admin SDK initialization
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./smart-deals-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Custom middleware for logging
+const logger = (req, res, next) => {
+  console.log("logging info");
+  next();
+};
+
+// Custom middleware for verifying Firebase token
+const verifyFirebaseToken = async (req, res, next) => {
+  console.log("verifying token", req.headers.authorization);
+  if (!req.headers.authorization) {
+    //do not allow to go further
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  try {
+    const userInfo = await admin.auth().verifyIdToken(token);
+    console.log("decoded user info", userInfo);
+    next();
+  } catch {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  //verify token here (omitted for brevity)
+
+  // next();
+};
 
 // MongoDB connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@firstdb.egqdlgn.mongodb.net/?appName=firstdb`;
@@ -123,7 +161,9 @@ async function run() {
     });
 
     // Bids APIs
-    app.get("/bids", async (req, res) => {
+    // Read Operation - Get all bids, optionally filtered by buyer email
+    app.get("/bids", logger, verifyFirebaseToken, async (req, res) => {
+      // console.log('header',req.headers);
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -137,7 +177,7 @@ async function run() {
 
     // Get bids for a specific product, sorted by bid price descending
     app.get("/products/bids/:productId", async (req, res) => {
-      const productId = req.params.productId; 
+      const productId = req.params.productId;
       const query = { product: productId };
       const cursor = bidsCollection.find(query).sort({ bid_price: -1 });
       const result = await cursor.toArray();
@@ -173,7 +213,7 @@ async function run() {
 
     await client.db("admin").command({ ping: 1 });
     console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
+      "Pinged your deployment. You successfully connected to MongoDB!",
     );
   } finally {
     // await client.close();
