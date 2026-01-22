@@ -183,7 +183,7 @@ async function run() {
     });
 
     // Read Operation - Get all products
-    app.post("/products", async (req, res) => {
+    app.post("/products", verifyFireBaseToken, async (req, res) => {
       const newProduct = req.body;
       const result = await productsCollection.insertOne(newProduct);
       res.send(result);
@@ -240,11 +240,10 @@ async function run() {
       const email = req.query.email;
       const query = {};
       if (email) {
+        query.buyer_email = email;
         if (email !== req.token_email) {
           return res.status(403).send({ message: "forbidden access" });
         }
-
-        query.buyer_email = email;
       }
 
       const cursor = bidsCollection.find(query);
